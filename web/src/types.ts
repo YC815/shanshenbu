@@ -12,6 +12,8 @@ export interface SensorState {
   present: boolean;
   distance_m: number;
   x_m: number;
+  /** 髖部中心高度（m，往上為正）；只看變化量 */
+  y_m: number;
   events: StepEvent[];
   shaking: boolean;
   hands_up: boolean;
@@ -36,6 +38,7 @@ export const EMPTY_STATE: SensorState = {
   present: false,
   distance_m: 0,
   x_m: 0,
+  y_m: 0,
   events: [],
   shaking: false,
   hands_up: false,

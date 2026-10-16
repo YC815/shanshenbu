@@ -16,11 +16,11 @@ export class KeyboardInput implements Input {
       switch (e.code) {
         case 'ArrowLeft':
           this.events.push('step_left');
-          this.x = Math.max(-1, this.x - 0.3);
+          this.x = Math.max(-1.2, this.x - 0.4);
           break;
         case 'ArrowRight':
           this.events.push('step_right');
-          this.x = Math.min(1, this.x + 0.3);
+          this.x = Math.min(1.2, this.x + 0.4);
           break;
         case 'ArrowUp':
           this.distance = Math.max(0.8, this.distance - 0.25);
@@ -49,6 +49,7 @@ export class KeyboardInput implements Input {
       present: this.present,
       distance_m: this.distance,
       x_m: this.x,
+      y_m: 0,
       events,
       shaking: this.held.has('Space'),
       hands_up: this.held.has('KeyH'),

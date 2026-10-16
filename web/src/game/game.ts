@@ -11,17 +11,15 @@ export interface Nuke {
   t: number;
   /** 累計哆嗦毛秒數 */
   shake: number;
-  /** 核彈出現時的橫向位置（側方核彈用） */
-  x0: number | null;
-  /** 核彈出現時的距離 */
-  d0: number | null;
-  /** 已經做出閃避動作，等 RESOLVE_AFTER_S 到了結算 */
-  dodged: boolean;
+  /** 側方核彈的瞄準點：出現當下玩家的位置（m） */
+  aim: { x: number; y: number; d: number };
 }
 
 export interface Flash {
   text: string;
   good: boolean;
+  /** 核彈在瞄準點爆炸（被炸，或側方核彈撲空） */
+  blast: boolean;
   t: number;
 }
 
@@ -118,7 +116,7 @@ export class Game {
 
     if (this.nuke) return this.updateNuke(dt, s);
     this.gap -= dt;
-    if (this.gap <= 0) this.spawn();
+    if (this.gap <= 0) this.spawn(s);
   }
 
   /** 0..1，閃過越多核彈越密 */
@@ -126,9 +124,9 @@ export class Game {
     return Math.min(1, this.dodged / C.WIN_DODGES);
   }
 
-  private spawn() {
+  private spawn(s: SensorState) {
     const kind = KINDS[Math.floor(this.rng() * KINDS.length)] ?? 'top';
-    this.nuke = { kind, t: 0, shake: 0, x0: null, d0: null, dodged: false };
+    this.nuke = { kind, t: 0, shake: 0, aim: { x: s.x_m, y: s.y_m, d: s.distance_m } };
     this.sounds.push(kind === 'top' ? 'warn_top' : 'warn_side');
   }
 
@@ -136,30 +134,28 @@ export class Game {
     const n = this.nuke!;
     n.t += dt;
     if (n.t >= C.WARN_S && n.t - dt < C.WARN_S) this.sounds.push(n.kind === 'top' ? 'launch_top' : 'launch_side');
-    // 一出現就開始算：玩家看到預警會直接動，那一下要算數
-    n.dodged ||= this.isDodging(n, dt, s);
-    if (n.dodged && n.t >= C.RESOLVE_AFTER_S) return this.resolve(true);
-    if (n.t >= NUKE_LIFE) this.resolve(false);
-  }
-
-  private isDodging(n: Nuke, dt: number, s: SensorState): boolean {
     if (n.kind === 'top') {
+      // 追蹤導彈一直跟著頭，跑不掉，只能一直揮手把它甩開
       if (s.shaking) n.shake += dt;
-      return n.shake >= C.SHAKE_NEED_S;
+      if (n.shake >= C.SHAKE_NEED_S && n.t >= C.RESOLVE_AFTER_S) return this.resolve(true);
+      if (n.t >= NUKE_LIFE) this.resolve(false);
+      return;
     }
-    // 側方核彈：上下左右前後、用什麼方法都行——觸發閃身步，或核彈出現後左右／前後移動夠遠
-    if (s.events.length > 0) return true;
-    n.x0 ??= s.x_m;
-    n.d0 ??= s.distance_m;
-    return Math.abs(s.x_m - n.x0) >= C.DODGE_SHIFT_M || Math.abs(s.distance_m - n.d0) >= C.DODGE_SHIFT_M;
+    // 側方核彈打向出現當下的位置：飛到時人真的離開那裡才算躲過，做了什麼動作不重要
+    if (n.t >= NUKE_LIFE) this.resolve(this.awayFromAim(n, s), true);
   }
 
-  private resolve(dodged: boolean) {
+  private awayFromAim(n: Nuke, s: SensorState): boolean {
+    const { x, y, d } = n.aim;
+    return Math.max(Math.abs(s.x_m - x), Math.abs(s.y_m - y), Math.abs(s.distance_m - d)) >= C.DODGE_SHIFT_M;
+  }
+
+  private resolve(dodged: boolean, blastAtAim = false) {
     this.nuke = null;
     this.gap = C.GAP_START_S + (C.GAP_END_S - C.GAP_START_S) * this.progress;
     if (dodged) {
       this.dodged++;
-      this.flash = { text: '閃過！', good: true, t: 0 };
+      this.flash = { text: '閃過！', good: true, blast: blastAtAim, t: 0 };
       this.sounds.push('dodge');
       if (this.dodged >= C.WIN_DODGES) {
         this.setPhase('WIN');
@@ -168,7 +164,7 @@ export class Game {
       return;
     }
     this.hp--;
-    this.flash = { text: '被炸！', good: false, t: 0 };
+    this.flash = { text: '被炸！', good: false, blast: true, t: 0 };
     this.sounds.push('hit');
     if (this.hp <= 0) {
       this.setPhase('LOSE');

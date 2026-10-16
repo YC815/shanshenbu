@@ -34,6 +34,7 @@ export class SensorInput implements Input {
         ...msg,
         distance_m: msg.distance_m ?? 0,
         x_m: msg.x_m ?? 0,
+        y_m: msg.y_m ?? 0,
         events: [],
       } as SensorState;
       this.events.push(...(msg.events ?? []));

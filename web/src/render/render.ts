@@ -32,6 +32,8 @@ const NEAR = 0.8;
 let lastBlast: { x: number; y: number; r: number } | null = null;
 /** 最近一次看到骨架時的瞄準點：漏偵測時沿用，核彈才不會瞬移到畫面中央 */
 let lastAnchor: Anchor | null = null;
+/** 側方核彈出現當下的胸口位置（畫面座標）：核彈固定打這裡，玩家要離開 */
+const aims = new WeakMap<Nuke, Pt>();
 const HINT: Record<Nuke['kind'], string> = {
   left: '← 閃身步！ →',
   right: '← 閃身步！ →',
@@ -61,7 +63,7 @@ export function render(ctx: CanvasRenderingContext2D, g: Game, s: SensorState, o
   drawOverlay(ctx, g, s, W, H, u, o.now);
   if (g.flash) {
     const a = 1 - g.flash.t / 0.9;
-    if (!g.flash.good && lastBlast) drawExplosion(ctx, lastBlast.x, lastBlast.y, lastBlast.r, g.flash.t / 0.9);
+    if (g.flash.blast && lastBlast) drawExplosion(ctx, lastBlast.x, lastBlast.y, lastBlast.r, g.flash.t / 0.9);
     if (!g.flash.good) {
       ctx.fillStyle = `rgba(255,40,40,${0.35 * a})`;
       ctx.fillRect(0, 0, W, H);
@@ -160,12 +162,14 @@ function drawNuke(ctx: CanvasRenderingContext2D, n: Nuke, a: Anchor, W: number, 
     x = a.head.x;
     y = -2 * r + (a.head.y + 2 * r) * p;
   } else {
+    let aim = aims.get(n);
+    if (!aim) aims.set(n, (aim = { ...a.chest }));
     const from = n.kind === 'left' ? -2 * r : W + 2 * r;
-    x = from + (a.chest.x - from) * p;
-    y = a.chest.y;
+    x = from + (aim.x - from) * p;
+    y = aim.y;
   }
   const hot = launched(n);
-  const target = n.kind === 'top' ? a.head : a.chest;
+  const target = n.kind === 'top' ? a.head : aims.get(n)!;
   lastBlast = { x, y, r };
 
   if (n.t < C.WARN_S) {

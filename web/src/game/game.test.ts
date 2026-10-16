@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SensorState, StepEvent } from '../types';
+import type { SensorState } from '../types';
 import { CONFIG as C } from './config';
 import { Game } from './game';
 
@@ -11,6 +11,7 @@ function st(over: Partial<SensorState> = {}): SensorState {
     present: true,
     distance_m: 4,
     x_m: 0,
+    y_m: 0,
     events: [],
     shaking: false,
     hands_up: false,
@@ -34,12 +35,20 @@ function playing(rngValue: number) {
   return g;
 }
 
-/** 跑到核彈可以結算閃過的時間點 */
+/** 跑到核彈出現，再跑到上方導彈可以結算閃過的時間點 */
 function untilNukeInWindow(g: Game) {
   run(g, C.FIRST_GAP_S + 0.05, st());
   expect(g.nuke).not.toBeNull();
   run(g, C.RESOLVE_AFTER_S, st());
 }
+
+/** 側方核彈：等它出現（瞄準 x=0 的位置），之後一直維持 s 直到核彈結算 */
+function sideNukeWhile(g: Game, s: SensorState) {
+  while (!g.nuke) g.update(DT, st());
+  while (g.nuke) g.update(DT, s);
+}
+
+const AWAY = C.DODGE_SHIFT_M + 0.05;
 
 describe('Game', () => {
   it('雙手舉高撐滿就倒數，倒數完開始', () => {
@@ -74,60 +83,58 @@ describe('Game', () => {
     expect(g.phase).toBe('IDLE');
   });
 
-  it('左方核彈：判定窗內往右閃身步 → 閃過', () => {
-    const g = playing(0);
-    untilNukeInWindow(g);
-    g.update(DT, st({ events: ['step_right'] }));
-    expect(g.nuke).toBeNull();
-    expect(g.hp).toBe(C.HP);
-    expect(g.dodged).toBe(1);
+  it('側方核彈：飛到時已經往旁邊躲開 → 閃過（左右都行）', () => {
+    for (const x of [AWAY, -AWAY]) {
+      const g = playing(0);
+      sideNukeWhile(g, st({ x_m: x }));
+      expect(g.hp).toBe(C.HP);
+      expect(g.dodged).toBe(1);
+    }
   });
 
-  it('左方核彈：往左閃也算閃過', () => {
-    const g = playing(0);
-    untilNukeInWindow(g);
-    g.update(DT, st({ events: ['step_left'] }));
-    expect(g.hp).toBe(C.HP);
-    expect(g.dodged).toBe(1);
-  });
-
-  it('側方核彈：沒觸發閃身步，但橫移夠遠也算', () => {
-    const g = playing(0.4);
-    untilNukeInWindow(g);
-    g.update(DT, st({ x_m: 0 }));
-    g.update(DT, st({ x_m: -(C.DODGE_SHIFT_M + 0.01) }));
-    expect(g.hp).toBe(C.HP);
-  });
-
-  it('側方核彈：往前跨（閃身步事件或距離變化）也算', () => {
-    const g = playing(0);
-    untilNukeInWindow(g);
-    g.update(DT, st({ events: ['step_forward'] }));
-    expect(g.dodged).toBe(1);
-    const g2 = playing(0.4);
-    untilNukeInWindow(g2);
-    g2.update(DT, st({ distance_m: 3 }));
-    g2.update(DT, st({ distance_m: 3 - (C.DODGE_SHIFT_M + 0.01) }));
-    expect(g2.dodged).toBe(1);
+  it('側方核彈：往前後跨或蹲下躲開也算', () => {
+    for (const away of [{ distance_m: 4 - AWAY }, { distance_m: 4 + AWAY }, { y_m: -AWAY }]) {
+      const g = playing(0.4);
+      sideNukeWhile(g, st(away));
+      expect(g.dodged).toBe(1);
+    }
   });
 
   it('側方核彈：站著不動 → 被炸', () => {
     const g = playing(0);
-    run(g, C.FIRST_GAP_S + 0.05, st());
-    run(g, C.WARN_S + C.FLIGHT_S, st());
+    sideNukeWhile(g, st());
     expect(g.hp).toBe(C.HP - 1);
   });
 
-  it('預警一出現就閃也算，但要等核彈飛出來才結算', () => {
-    const g = playing(0.4);
-    run(g, C.FIRST_GAP_S + 0.05, st());
-    g.update(DT, st({ events: ['step_left'] as StepEvent[] }));
+  it('側方核彈：只做了閃身步動作但又回到原位 → 被炸', () => {
+    const g = playing(0);
+    while (!g.nuke) g.update(DT, st());
+    g.update(DT, st({ events: ['step_right'], x_m: AWAY }));
+    sideNukeWhile(g, st());
+    expect(g.hp).toBe(C.HP - 1);
+  });
+
+  it('側方核彈：移動不夠遠 → 被炸', () => {
+    const g = playing(0);
+    sideNukeWhile(g, st({ x_m: C.DODGE_SHIFT_M - 0.05 }));
+    expect(g.hp).toBe(C.HP - 1);
+  });
+
+  it('側方核彈：飛到那一刻才結算', () => {
+    const g = playing(0);
+    while (!g.nuke) g.update(DT, st());
+    run(g, C.WARN_S + C.FLIGHT_S - 0.1, st({ x_m: AWAY }));
     expect(g.nuke).not.toBeNull();
-    expect(g.dodged).toBe(0);
-    run(g, C.RESOLVE_AFTER_S, st());
+    run(g, 0.15, st({ x_m: AWAY }));
     expect(g.nuke).toBeNull();
     expect(g.dodged).toBe(1);
-    expect(g.hp).toBe(C.HP);
+  });
+
+  it('上方追蹤導彈：怎麼移動都沒用，要揮手', () => {
+    const g = playing(0.9);
+    while (!g.nuke) g.update(DT, st());
+    while (g.nuke) g.update(DT, st({ x_m: 1 }));
+    expect(g.hp).toBe(C.HP - 1);
   });
 
   it('上方核彈：哆嗦毛滿 0.5 秒 → 閃過', () => {
@@ -149,10 +156,12 @@ describe('Game', () => {
 
   it(`閃過 ${C.WIN_DODGES} 顆 → WIN`, () => {
     const g = playing(0);
+    let x = 0;
     for (let i = 0; i < C.WIN_DODGES; i++) {
       expect(g.phase).toBe('PLAYING');
-      while (!g.nuke || g.nuke.t < C.RESOLVE_AFTER_S) g.update(DT, st());
-      g.update(DT, st({ events: ['step_right'] }));
+      while (!g.nuke) g.update(DT, st({ x_m: x }));
+      x = x === 0 ? AWAY : 0;
+      while (g.nuke) g.update(DT, st({ x_m: x }));
     }
     expect(g.dodged).toBe(C.WIN_DODGES);
     expect(g.phase).toBe('WIN');
@@ -169,8 +178,7 @@ describe('Game', () => {
     expect(g.drainSounds()).toEqual(['tick', 'tick', 'tick', 'go']);
     run(g, C.FIRST_GAP_S + C.WARN_S + 0.05, st());
     expect(g.drainSounds()).toEqual(['warn_side', 'launch_side']);
-    run(g, C.RESOLVE_AFTER_S - C.WARN_S, st());
-    g.update(DT, st({ events: ['step_left'] }));
+    while (g.nuke) g.update(DT, st({ x_m: AWAY }));
     expect(g.drainSounds()).toEqual(['dodge']);
   });
 
