@@ -32,7 +32,7 @@ const NEAR = 0.8;
 let lastBlast: { x: number; y: number; r: number } | null = null;
 /** 最近一次看到骨架時的瞄準點：漏偵測時沿用，核彈才不會瞬移到畫面中央 */
 let lastAnchor: Anchor | null = null;
-/** 側方核彈出現當下的胸口位置（畫面座標）：核彈固定打這裡，玩家要離開 */
+/** 側方核彈的瞄準點（畫面座標）：預警時跟著胸口，發射後固定，玩家要離開 */
 const aims = new WeakMap<Nuke, Pt>();
 const HINT: Record<Nuke['kind'], string> = {
   left: '← 閃身步！ →',
@@ -162,8 +162,8 @@ function drawNuke(ctx: CanvasRenderingContext2D, n: Nuke, a: Anchor, W: number, 
     x = a.head.x;
     y = -2 * r + (a.head.y + 2 * r) * p;
   } else {
-    let aim = aims.get(n);
-    if (!aim) aims.set(n, (aim = { ...a.chest }));
+    if (!launched(n) || !aims.has(n)) aims.set(n, { ...a.chest });
+    const aim = aims.get(n)!;
     const from = n.kind === 'left' ? -2 * r : W + 2 * r;
     x = from + (aim.x - from) * p;
     y = aim.y;

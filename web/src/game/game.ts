@@ -11,7 +11,7 @@ export interface Nuke {
   t: number;
   /** 累計哆嗦毛秒數 */
   shake: number;
-  /** 側方核彈的瞄準點：出現當下玩家的位置（m） */
+  /** 側方核彈的瞄準點（m）：預警期間跟著玩家，發射那一刻鎖定 */
   aim: { x: number; y: number; d: number };
 }
 
@@ -141,7 +141,8 @@ export class Game {
       if (n.t >= NUKE_LIFE) this.resolve(false);
       return;
     }
-    // 側方核彈打向出現當下的位置：飛到時人真的離開那裡才算躲過，做了什麼動作不重要
+    // 預警時一直瞄著玩家，發射後才鎖定：要在飛行途中躲。只看飛到時人在不在那裡，做了什麼動作不重要
+    if (!launched(n)) n.aim = { x: s.x_m, y: s.y_m, d: s.distance_m };
     if (n.t >= NUKE_LIFE) this.resolve(this.awayFromAim(n, s), true);
   }
 

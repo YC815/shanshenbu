@@ -42,9 +42,10 @@ function untilNukeInWindow(g: Game) {
   run(g, C.RESOLVE_AFTER_S, st());
 }
 
-/** 側方核彈：等它出現（瞄準 x=0 的位置），之後一直維持 s 直到核彈結算 */
+/** 側方核彈：等它出現、站在原地撐過預警（發射時鎖定 x=0），飛行中一直維持 s 直到結算 */
 function sideNukeWhile(g: Game, s: SensorState) {
   while (!g.nuke) g.update(DT, st());
+  while (g.nuke && g.nuke.t < C.WARN_S) g.update(DT, st());
   while (g.nuke) g.update(DT, s);
 }
 
@@ -83,7 +84,7 @@ describe('Game', () => {
     expect(g.phase).toBe('IDLE');
   });
 
-  it('側方核彈：飛到時已經往旁邊躲開 → 閃過（左右都行）', () => {
+  it('側方核彈：飛行中往旁邊躲開 → 閃過（左右都行）', () => {
     for (const x of [AWAY, -AWAY]) {
       const g = playing(0);
       sideNukeWhile(g, st({ x_m: x }));
@@ -109,8 +110,16 @@ describe('Game', () => {
   it('側方核彈：只做了閃身步動作但又回到原位 → 被炸', () => {
     const g = playing(0);
     while (!g.nuke) g.update(DT, st());
+    while (g.nuke.t < C.WARN_S) g.update(DT, st());
     g.update(DT, st({ events: ['step_right'], x_m: AWAY }));
-    sideNukeWhile(g, st());
+    while (g.nuke) g.update(DT, st());
+    expect(g.hp).toBe(C.HP - 1);
+  });
+
+  it('側方核彈：只在預警時移動，瞄準會跟過去 → 被炸', () => {
+    const g = playing(0);
+    while (!g.nuke) g.update(DT, st());
+    while (g.nuke) g.update(DT, st({ x_m: AWAY }));
     expect(g.hp).toBe(C.HP - 1);
   });
 
@@ -123,7 +132,8 @@ describe('Game', () => {
   it('側方核彈：飛到那一刻才結算', () => {
     const g = playing(0);
     while (!g.nuke) g.update(DT, st());
-    run(g, C.WARN_S + C.FLIGHT_S - 0.1, st({ x_m: AWAY }));
+    run(g, C.WARN_S, st());
+    run(g, C.FLIGHT_S - 0.1, st({ x_m: AWAY }));
     expect(g.nuke).not.toBeNull();
     run(g, 0.15, st({ x_m: AWAY }));
     expect(g.nuke).toBeNull();
@@ -159,7 +169,7 @@ describe('Game', () => {
     let x = 0;
     for (let i = 0; i < C.WIN_DODGES; i++) {
       expect(g.phase).toBe('PLAYING');
-      while (!g.nuke) g.update(DT, st({ x_m: x }));
+      while (!g.nuke || g.nuke.t < C.WARN_S) g.update(DT, st({ x_m: x }));
       x = x === 0 ? AWAY : 0;
       while (g.nuke) g.update(DT, st({ x_m: x }));
     }
