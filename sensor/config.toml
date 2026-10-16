@@ -1,0 +1,82 @@
+# 感測端門檻。改完重啟 server.py 生效。
+
+[server]
+host = "localhost"
+port = 8765
+camera_retry_s = 2.0
+
+[camera]
+# Orbbec 對齊：sw = 軟體 AlignFilter（CPU，已實測）；hw = 相機硬體 D2C（省 CPU，開不起來自動退回 sw，未實測）
+align = "sw"
+# depth 解析度：default = SDK 預設（336L 848x480）；low = 同 fps 最小的 Y16（深度只取關節附近中位數，低解析度夠用，sw 對齊更省）
+depth = "default"
+
+[pose]
+# MediaPipe 推論：cpu | gpu（Metal；建立或推論失敗自動退回 cpu）
+# M3 實測 lite 4 人：連續跑 GPU 6.3 / CPU 15.5 ms，但照相機 30Hz 節奏呼叫 GPU 18.3 / CPU 19.9 ms，幾乎沒差，所以預設 cpu
+delegate = "cpu"
+
+[perf]
+# 每幾秒印一行各階段耗時中位數（ms）與實際 Hz；0 = 關
+log_s = 5
+
+[presence]
+min_hip_visibility = 0.5
+# 漏偵測這麼久以內沿用上一幀（甩手、側身時 MediaPipe 常掉幀），超過才算消失
+hold_s = 0.4
+
+[step]
+# 閃身步：window_s 秒內髖部中心往上下左右前後任一方向移動 >= min_shift_m
+window_s = 0.4
+min_shift_m = 0.25
+cooldown_s = 0.5
+
+[shake]
+# 狗熊哆嗦毛：手肘、手腕相對肩膀中心的速度（單位：肩寬/秒），window_s 內中位數 > min_speed
+window_s = 0.6
+min_speed = 3.0
+
+[hands_up]
+min_visibility = 0.5
+
+[depth]
+# 髖部周圍取樣框半徑（像素）
+hip_patch_px = 15
+
+[webcam]
+# 一般攝影機無深度：用肩寬估距離
+shoulder_width_m = 0.38
+hfov_deg = 70.0
+
+[video]
+# 推給網頁的即時影像
+width = 960
+quality = 70
+
+[lock]
+# 鎖定玩家：待機時回報舉手的人（沒人舉手就回報最靠畫面中央的），開局那一刻鎖住他，回待機才解鎖
+max_people = 4
+# 每幀可接受的位移：max_jump_m + max_speed_mps × 距上次看到的秒數
+max_jump_m = 0.4
+max_speed_mps = 2.5
+# 鎖定的人消失超過這麼久就解除（有衣服指紋可以撐久一點）
+lost_timeout_s = 10.0
+# 衣服指紋（上衣 + 褲子 HSV 直方圖，Bhattacharyya 距離 0 = 一樣、1 = 完全不同）
+# 距離 > appearance_max 一律不認；位置跳太遠時要 <= appearance_reacquire 才認回來
+appearance_max = 0.55
+appearance_reacquire = 0.35
+appearance_weight = 2.0
+# 每幀指紋更新比例（適應光線）
+appearance_update = 0.05
+
+[person]
+# 過濾非人物（樹、海報）：只用在鎖定前挑人；鎖定後側身、甩手常常不過，不再檢查。沒有深度（webcam）時只檢查可見度與上下順序
+min_core_visibility = 0.5
+min_distance_m = 0.5
+max_distance_m = 5.5
+shoulder_min_m = 0.22
+shoulder_max_m = 0.65
+torso_min_m = 0.3
+torso_max_m = 0.8
+# 肩膀中心與髖部中心的深度差
+max_torso_depth_diff_m = 0.5

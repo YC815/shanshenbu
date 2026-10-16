@@ -1,0 +1,24 @@
+[project]
+name = "shanshenbu-sensor"
+version = "0.1.0"
+description = "閃身步遊戲感測端：Orbbec Gemini 336L + MediaPipe Pose → WebSocket"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mediapipe>=1.1.1",
+    "numpy>=2.5.4",
+    "opencv-python>=5.0.0.93",
+    "pyorbbecsdk2>=2.1.2",
+    "websockets>=17.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
